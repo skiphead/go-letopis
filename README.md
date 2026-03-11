@@ -1,10 +1,6 @@
 # 🧠 MeetMind - AI Meeting Assistant
 
 <p align="center">
-  <img src="docs/logo.png" alt="MeetMind Logo" width="200"/>
-</p>
-
-<p align="center">
   <b>🇬🇧 English</b> | <b>🇷🇺 Русский</b>
 </p>
 
