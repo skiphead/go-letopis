@@ -1,7 +1,13 @@
-# 🧠 MeetMind - AI Meeting Assistant
+# 🎯 TalkTracer - AI Meeting Assistant
 
 <p align="center">
   <b>🇬🇧 English</b> | <b>🇷🇺 Русский</b>
+</p>
+
+<p align="center">
+  <a href="https://t.me/talktracer_bot">
+    <img src="https://img.shields.io/badge/Telegram-Бот-26A5E4?style=for-the-badge&logo=telegram" alt="Telegram Bot">
+  </a>
 </p>
 
 ---
@@ -9,7 +15,7 @@
 <!-- ENGLISH VERSION -->
 <div lang="en">
 
-# 🇬🇧 MeetMind
+# 🇬🇧 TalkTracer
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
 [![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=for-the-badge&logo=telegram)](https://core.telegram.org/bots)
@@ -18,7 +24,7 @@
 
 ## 📋 About
 
-**MeetMind** is a Telegram bot that automatically transcribes meeting audio, creates concise summaries, and enables searching through conversation content. No more lost agreements!
+**TalkTracer** is a Telegram bot that automatically transcribes meeting audio, creates concise summaries, and enables searching through conversation content. No more lost agreements!
 
 ### 🎯 Problem
 - We forget 80% of what we hear within 24 hours
@@ -52,8 +58,8 @@
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Telegram   │────▶│   MeetMind   │────▶│  PostgreSQL │
-│    Bot      │◀────│    Worker    │◀────│             │
+│  Telegram   │────▶│   TalkTracer  │────▶│  PostgreSQL │
+│    Bot      │◀────│    Worker     │◀────│             │
 └─────────────┘     └──────┬───────┘     └─────────────┘
                            │
                     ┌──────▼───────┐
@@ -92,8 +98,8 @@
 
 1. **Clone repository**
 ```bash
-git clone https://github.com/yourusername/meetmind.git
-cd meetmind
+git clone https://github.com/yourusername/talktracer.git
+cd talktracer
 ```
 
 2. **Configure environment**
@@ -115,13 +121,13 @@ make migrate-up
 5. **Build and run**
 ```bash
 make build
-./bin/meetmind
+./bin/talktracer
 ```
 
 ### 🐳 Docker Setup
 ```bash
 # Build image
-docker build -t meetmind .
+docker build -t talktracer .
 
 # Run all services
 docker-compose up -d
@@ -130,7 +136,7 @@ docker-compose up -d
 ## 📁 Project Structure
 
 ```
-meetmind/
+talktracer/
 ├── cmd/
 │   └── bot/                 # Entry point
 │       └── main.go
@@ -175,7 +181,7 @@ GIGACHAT_CLIENT_SECRET=your_client_secret
 GIGACHAT_AUTH_KEY=your_auth_key
 
 # Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/meetmind
+DATABASE_URL=postgresql://user:pass@localhost:5432/talktracer
 
 # App
 WORKER_COUNT=5
@@ -215,12 +221,6 @@ make test-coverage
 make lint
 ```
 
-## 📊 Monitoring
-
-- **Metrics**: Prometheus endpoint at `/metrics`
-- **Logs**: Structured JSON logging
-- **Tracing**: OpenTelemetry support (optional)
-
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -228,11 +228,6 @@ make lint
 3. Commit changes (`git commit -m 'Add amazing feature'`)
 4. Push branch (`git push origin feature/amazing-feature`)
 5. Open Pull Request
-
-### Code Requirements
-- Pass `make lint`
-- Write tests for new functionality
-- Update documentation
 
 ## 📈 Roadmap
 
@@ -251,9 +246,9 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ## 📞 Contact
 
-- Telegram: [@meetmind_bot](https://t.me/meetmind_bot) (demo bot)
-- GitHub Issues: [create issue](https://github.com/yourusername/meetmind/issues)
-- Email: support@meetmind.ai
+- Telegram: [@talktracer_bot](https://t.me/talktracer_bot) (demo bot)
+- GitHub Issues: [create issue](https://github.com/yourusername/talktracer/issues)
+- Email: support@talktracer.ai
 
 </div>
 
@@ -262,7 +257,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 <!-- RUSSIAN VERSION -->
 <div lang="ru">
 
-# 🇷🇺 MeetMind
+# 🇷🇺 TalkTracer
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
 [![Telegram Bot](https://img.shields.io/badge/Telegram-Бот-26A5E4?style=for-the-badge&logo=telegram)](https://core.telegram.org/bots)
@@ -271,7 +266,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ## 📋 О проекте
 
-**MeetMind** — это Telegram-бот, который автоматически транскрибирует аудиозаписи встреч, создаёт краткие выжимки и позволяет искать по содержимому разговоров. Больше никаких потерянных договорённостей!
+**TalkTracer** — это Telegram-бот, который автоматически транскрибирует аудиозаписи встреч, создаёт краткие выжимки и позволяет искать по содержимому разговоров. Больше никаких потерянных договорённостей!
 
 ### 🎯 Проблема
 - Мы забываем 80% услышанного через 24 часа
@@ -305,8 +300,8 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Telegram   │────▶│   MeetMind   │────▶│  PostgreSQL │
-│    Bot      │◀────│    Worker    │◀────│             │
+│  Telegram   │────▶│   TalkTracer  │────▶│  PostgreSQL │
+│    Bot      │◀────│    Worker     │◀────│             │
 └─────────────┘     └──────┬───────┘     └─────────────┘
                            │
                     ┌──────▼───────┐
@@ -345,8 +340,8 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 1. **Клонируйте репозиторий**
 ```bash
-git clone https://github.com/yourusername/meetmind.git
-cd meetmind
+git clone https://github.com/yourusername/talktracer.git
+cd talktracer
 ```
 
 2. **Настройте переменные окружения**
@@ -368,13 +363,13 @@ make migrate-up
 5. **Соберите и запустите**
 ```bash
 make build
-./bin/meetmind
+./bin/talktracer
 ```
 
 ### 🐳 Запуск через Docker
 ```bash
 # Сборка образа
-docker build -t meetmind .
+docker build -t talktracer .
 
 # Запуск всех сервисов
 docker-compose up -d
@@ -383,7 +378,7 @@ docker-compose up -d
 ## 📁 Структура проекта
 
 ```
-meetmind/
+talktracer/
 ├── cmd/
 │   └── bot/                 # Точка входа
 │       └── main.go
@@ -428,7 +423,7 @@ GIGACHAT_CLIENT_SECRET=your_client_secret
 GIGACHAT_AUTH_KEY=your_auth_key
 
 # Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/meetmind
+DATABASE_URL=postgresql://user:pass@localhost:5432/talktracer
 
 # App
 WORKER_COUNT=5
@@ -468,12 +463,6 @@ make test-coverage
 make lint
 ```
 
-## 📊 Мониторинг
-
-- **Метрики**: Prometheus endpoint на `/metrics`
-- **Логи**: Структурированные логи в JSON
-- **Трейсинг**: Поддержка OpenTelemetry (опционально)
-
 ## 🤝 Вклад в проект
 
 1. Форкните репозиторий
@@ -481,11 +470,6 @@ make lint
 3. Зафиксируйте изменения (`git commit -m 'Add amazing feature'`)
 4. Запушьте ветку (`git push origin feature/amazing-feature`)
 5. Откройте Pull Request
-
-### Требования к коду
-- Проходите `make lint`
-- Пишите тесты на новую функциональность
-- Обновляйте документацию
 
 ## 📈 План развития
 
@@ -504,9 +488,9 @@ MIT License. Смотрите [LICENSE](LICENSE) для деталей.
 
 ## 📞 Контакты
 
-- Telegram: [@meetmind_bot](https://t.me/meetmind_bot) (демо-бот)
-- GitHub Issues: [создать issue](https://github.com/yourusername/meetmind/issues)
-- Email: support@meetmind.ai
+- Telegram: [@talktracer_bot](https://t.me/talktracer_bot) (демо-бот)
+- GitHub Issues: [создать issue](https://github.com/yourusername/talktracer/issues)
+- Email: support@talktracer.ai
 
 </div>
 
@@ -514,6 +498,12 @@ MIT License. Смотрите [LICENSE](LICENSE) для деталей.
 
 <p align="center">
   <b>🇬🇧 English</b> | <b>🇷🇺 Русский</b>
+</p>
+
+<p align="center">
+  <a href="https://t.me/talktracer_bot">
+    <img src="https://img.shields.io/badge/🚀_Try_TalkTracer_on_Telegram-26A5E4?style=for-the-badge&logo=telegram" alt="Try on Telegram">
+  </a>
 </p>
 
 <p align="center">
