@@ -1,0 +1,12 @@
+telegram:
+  address: "https://core.telegram.org/bots/api"
+  token: "${TELEGRAM_BOT_TOKEN}"  # рекомендуется использовать env-переменные
+
+db_config:
+  schema: "public"
+  dbname: "talktracer"
+  user: "${DB_USER}"
+  password: "${DB_PASSWORD}"
+  nodes:
+    - "127.0.0.1:5435"
+    - "127.0.0.1:5436"  # опционально: реплика
