@@ -20,7 +20,6 @@ import (
 // Constants for bot configuration.
 const (
 	MaxAudioSize           = 20 * 1024 * 1024
-	MaxHTTPTimeout         = 30 * time.Second
 	JobTimeout             = 10 * time.Minute
 	ShutdownTimeout        = 30 * time.Second
 	WorkerShutdownTimeout  = 5 * time.Second
@@ -89,7 +88,7 @@ func validateDependencies(cfg *config.Config, useCase usecase.AIUseCase, logger 
 		return errors.New("config is required")
 	}
 	if useCase == nil {
-		return errors.New("storage repository is required")
+		return errors.New("ai use case is required") // Fixed message
 	}
 	if logger == nil {
 		return errors.New("logger is required")
@@ -100,12 +99,20 @@ func validateDependencies(cfg *config.Config, useCase usecase.AIUseCase, logger 
 // createTelebot creates and configures a new telebot instance.
 func createTelebot(cfg *config.Config, logger *slog.Logger) (*telebot.Bot, error) {
 	settings := cfg.Telegram.ToTelebotSettings()
+	clientTimeout := 180*time.Second + 10*time.Second
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: cfg.Telegram.Insecure,
+	}
+
+	if cfg.Telegram.Insecure {
+		logger.Warn("INSECURE: TLS certificate verification is disabled (InsecureSkipVerify=true). Do not use in production!")
+	}
+
 	settings.Client = &http.Client{
-		Timeout: MaxHTTPTimeout,
+		Timeout: clientTimeout,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: cfg.Telegram.Insecure,
-			},
+			TLSClientConfig:       tlsConfig,
 			TLSHandshakeTimeout:   20 * time.Second,
 			ExpectContinueTimeout: 10 * time.Second,
 			MaxIdleConns:          10,
@@ -146,7 +153,17 @@ func (b *Bot) Start(ctx context.Context) {
 
 	b.startWorkers(ctx)
 	go b.cleanupRoutine(ctx)
-	go b.Bot.Start()
+
+	// Run telebot in a goroutine since it blocks
+	go func() {
+		b.logger.Info("Starting telebot main loop...")
+		// Bot.Start() blocks until Stop() is called
+		b.Bot.Start()
+		b.logger.Info("Telebot main loop stopped")
+
+		// When the bot stops, trigger the shutdown sequence
+		cancel()
+	}()
 
 	<-ctx.Done()
 	b.Stop()
@@ -172,7 +189,7 @@ func (b *Bot) cleanupRoutine(ctx context.Context) {
 			logger.Info("Cleanup routine stopping")
 			return
 		case <-ticker.C:
-			if err := b.CleanupOldTempFiles(CleanupMaxAge); err != nil {
+			if err := b.CleanupOldTempFiles(ctx, CleanupMaxAge); err != nil {
 				logger.Warn("Cleanup error", slog.String("error", err.Error()))
 			}
 		}

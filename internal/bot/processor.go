@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/skiphead/go-letopis/internal/domain/entity"
 	"log/slog"
+	"os"
 	"runtime/debug"
 	"time"
 
+	"github.com/skiphead/go-letopis/internal/domain/entity"
 	"gopkg.in/telebot.v3"
 )
 
@@ -81,18 +82,16 @@ func (b *Bot) processJob(job *processJob, logger *slog.Logger) {
 		{"notify_success", b.stepNotifySuccess},
 	}
 
-	ctx := &stepContext{
-		tempPath: "",
-	}
+	stepCtx := &stepContext{}
 
 	for _, step := range steps {
 		select {
 		case <-job.ctx.Done():
-			b.handleStepError(job, logger, ErrJobCancelled, step.name, ctx)
+			b.handleStepError(job, logger, ErrJobCancelled, step.name, stepCtx)
 			return
 		default:
-			if err := b.runStep(job, logger, step.name, step.fn, ctx); err != nil {
-				b.handleStepError(job, logger, err, step.name, ctx)
+			if err := b.runStep(job, logger, step.name, step.fn, stepCtx); err != nil {
+				b.handleStepError(job, logger, err, step.name, stepCtx)
 				return
 			}
 		}
@@ -112,12 +111,11 @@ func (b *Bot) runStep(job *processJob, logger *slog.Logger, stepName string,
 	}
 
 	if err != nil {
-		attrs = append(attrs, slog.String("error", err.Error()))
-		b.logger.LogAttrs(context.Background(), slog.LevelError, "Step failed", attrs...)
+		logger.LogAttrs(context.Background(), slog.LevelError, "Step failed", attrs...)
 		return err
 	}
 
-	b.logger.LogAttrs(context.Background(), slog.LevelDebug, "Step completed", attrs...)
+	logger.LogAttrs(context.Background(), slog.LevelDebug, "Step completed", attrs...)
 	return nil
 }
 
@@ -125,8 +123,13 @@ func (b *Bot) runStep(job *processJob, logger *slog.Logger, stepName string,
 func (b *Bot) stepCheckCancelled(job *processJob, logger *slog.Logger) error {
 	select {
 	case <-job.ctx.Done():
+		cause := context.Cause(job.ctx)
+		reason := "unknown"
+		if cause != nil {
+			reason = cause.Error()
+		}
 		logger.Info("Job cancelled before processing",
-			slog.String("reason", context.Cause(job.ctx).Error()))
+			slog.String("reason", reason))
 		return ErrJobCancelled
 	default:
 		return nil
@@ -168,11 +171,17 @@ func (b *Bot) stepConvertAndSave(job *processJob, logger *slog.Logger) error {
 		return fmt.Errorf("%w: no file to save", ErrInvalidFile)
 	}
 
+	// Ensure cleanup after processing
+	defer func() {
+		if job.tempPath != "" {
+			b.cleanupTempFile(job.tempPath, logger)
+		}
+	}()
+
 	media := b.createMediaFromJob(job)
-	resp, err := b.aiUseCase.Recognition(context.Background(), media)
+	resp, err := b.aiUseCase.Recognition(job.ctx, media)
 	if err != nil {
-		logger.Error("Save failed", slog.String("error", err.Error()))
-		b.cleanupTempFile(job.tempPath, logger)
+		logger.Error("Recognition failed", slog.String("error", err.Error()))
 		return fmt.Errorf("%w: %w", ErrSaveFailed, err)
 	}
 
@@ -180,7 +189,7 @@ func (b *Bot) stepConvertAndSave(job *processJob, logger *slog.Logger) error {
 		b.sendSafeToChat(media.ChatID, resp, telebot.ModeHTML)
 	}
 
-	logger.Info("File saved successfully",
+	logger.Info("File processed successfully",
 		slog.Int("duration", job.duration),
 		slog.Int64("size", job.fileSize),
 		slog.String("path", job.tempPath))
@@ -219,6 +228,7 @@ func (b *Bot) handleStepError(job *processJob, logger *slog.Logger, err error, s
 		b.sendSafeToChat(job.chatID, MessageInternalError, telebot.ModeHTML)
 	}
 
+	// Clean up temp file if it exists
 	if job.tempPath != "" {
 		b.cleanupTempFile(job.tempPath, logger)
 	}
@@ -257,17 +267,6 @@ func (b *Bot) enrichLogger(logger *slog.Logger, job *processJob) *slog.Logger {
 	)
 }
 
-// recoverFromPanic recovers from panics in job handlers.
-func (b *Bot) recoverFromPanic(job *processJob, logger *slog.Logger) {
-	if r := recover(); r != nil {
-		logger.Error("Panic in job handler",
-			slog.Any("panic", r),
-			slog.String("stack", string(debug.Stack())),
-		)
-		b.sendSafeToChat(job.chatID, MessageInternalError, telebot.ModeHTML)
-	}
-}
-
 // downloadFile downloads the file to a temporary location.
 func (b *Bot) downloadFile(job *processJob, logger *slog.Logger) (string, error) {
 	tempPath, err := b.downloadAudioToTemp(job.ctx, &job.file, job.fileName, job.mimeType)
@@ -298,4 +297,40 @@ func (b *Bot) createMediaFromJob(job *processJob) *entity.Media {
 	}
 
 	return media
+}
+
+// recoverFromPanic recovers from panics in job handlers.
+func (b *Bot) recoverFromPanic(job *processJob, logger *slog.Logger) {
+	if r := recover(); r != nil {
+		logger.Error("Panic in job handler",
+			slog.Any("panic", r),
+			slog.String("stack", string(debug.Stack())),
+		)
+
+		// Clean up temp file on panic
+		if job.tempPath != "" {
+			b.cleanupTempFile(job.tempPath, logger)
+		}
+
+		b.sendSafeToChat(job.chatID, MessageInternalError, telebot.ModeHTML)
+	}
+}
+
+// cleanupTempFile removes a temporary file and is idempotent.
+func (b *Bot) cleanupTempFile(path string, logger *slog.Logger) {
+	if path == "" {
+		return
+	}
+
+	if err := os.Remove(path); err != nil {
+		if !os.IsNotExist(err) {
+			logger.Error("Failed to cleanup temp file",
+				slog.String("path", path),
+				slog.String("error", err.Error()))
+		}
+		return
+	}
+
+	logger.Debug("Temp file cleaned up", slog.String("path", path))
+	b.markFileInactive(path)
 }

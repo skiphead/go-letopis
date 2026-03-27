@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"gopkg.in/telebot.v3"
@@ -42,7 +43,16 @@ func extractUpdateMetadata(c telebot.Context) updateMetadata {
 	if msg := c.Message(); msg != nil {
 		meta.handler = determineMessageHandler(msg)
 	} else if cb := c.Callback(); cb != nil {
-		meta.handler = "callback"
+		handler := "callback"
+		if cb.Data != "" {
+			// Sanitize callback data: log only the first part if it's a structured callback
+			if parts := strings.Fields(cb.Data); len(parts) > 0 && strings.HasPrefix(parts[0], "/") {
+				handler = "cb:" + parts[0]
+			} else {
+				handler = "callback:data"
+			}
+		}
+		meta.handler = handler
 	}
 
 	if sender := c.Sender(); sender != nil {
@@ -61,11 +71,26 @@ func extractUpdateMetadata(c telebot.Context) updateMetadata {
 func determineMessageHandler(msg *telebot.Message) string {
 	switch {
 	case msg.Text != "":
-		return msg.Text
+		if strings.HasPrefix(strings.TrimSpace(msg.Text), "/") {
+			parts := strings.Fields(msg.Text)
+			if len(parts) > 0 {
+				// Only log the command name, not arguments
+				return "cmd:" + parts[0]
+			}
+		}
+		return "text"
 	case msg.Audio != nil:
 		return "audio"
 	case msg.Voice != nil:
 		return "voice"
+	case msg.Photo != nil:
+		return "photo"
+	case msg.Document != nil:
+		return "document"
+	case msg.Contact != nil:
+		return "contact"
+	case msg.Location != nil:
+		return "location"
 	default:
 		return "unknown"
 	}
@@ -73,8 +98,14 @@ func determineMessageHandler(msg *telebot.Message) string {
 
 // resolveUsername returns the username or a generated fallback.
 func resolveUsername(user *telebot.User) string {
+	if user == nil {
+		return "anonymous"
+	}
 	if user.Username != "" {
-		return user.Username
+		return "@" + user.Username
+	}
+	if user.FirstName != "" {
+		return user.FirstName
 	}
 	return fmt.Sprintf("user_%d", user.ID)
 }

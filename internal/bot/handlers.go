@@ -46,7 +46,7 @@ func (b *Bot) chat(c telebot.Context) error {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
-	receiveMsg, err := b.aiUseCase.Chat(context.Background(), c.Message().Payload)
+	receiveMsg, err := b.aiUseCase.Chat(ctx, c.Message().Payload)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (b *Bot) listByUserID(c telebot.Context) error {
 		slog.Int64("user_id", user.ID),
 	)
 
-	if !b.userUseCase.Validate(context.Background(), user.ID) {
+	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
@@ -99,15 +99,19 @@ func (b *Bot) get(c telebot.Context) error {
 	)
 
 	id, err := strconv.Atoi(c.Message().Payload)
-	if err != nil {
-		return err
+	if err != nil || id <= 0 {
+		b.logger.Warn("Invalid meeting ID requested",
+			slog.Int64("user_id", user.ID),
+			slog.String("payload", c.Message().Payload),
+		)
+		return c.Reply(MessageInternalError, telebot.ModeHTML) // 👈 Дружелюбное сообщение
 	}
 
 	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
-	meeting, err := b.meetingUseCase.Get(context.Background(), int64(id), user.ID)
+	meeting, err := b.meetingUseCase.Get(ctx, int64(id), user.ID)
 	if err != nil {
 		return err
 	}
@@ -136,24 +140,19 @@ func (b *Bot) find(c telebot.Context) error {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
-	prepKeywords := strings.Split(c.Message().Payload, " ")
-	var keywords []string
-	for _, keyword := range prepKeywords {
-		keywords = append(keywords, strings.TrimSpace(keyword))
-	}
+	keywords := strings.Fields(c.Message().Payload)
 
 	req := entity.SearchRequest{
 		UserID:   user.ID,
 		Keywords: keywords,
 	}
 
-	result, err := b.meetingUseCase.SearchByKeywords(context.Background(), req)
+	result, err := b.meetingUseCase.SearchByKeywords(ctx, req)
 	if err != nil {
 		return err
 	}
 
 	msg := FormatSearchResult(result)
-	fmt.Println(msg, err)
 
 	return c.Send(msg, telebot.ModeHTML)
 }
@@ -190,6 +189,10 @@ func (b *Bot) onStart(c telebot.Context) error {
 // onHelp handles the /help command.
 func (b *Bot) onHelp(c telebot.Context) error {
 	user := c.Sender()
+	if user == nil {
+		b.logger.Warn("Help command from anonymous user")
+		return c.Send(MessageHelp, telebot.ModeHTML)
+	}
 	b.logger.Info("Help command",
 		slog.String("username", resolveUsername(user)),
 		slog.Int64("user_id", user.ID),
@@ -199,11 +202,17 @@ func (b *Bot) onHelp(c telebot.Context) error {
 
 // onTextMessage handles regular text messages.
 func (b *Bot) onTextMessage(c telebot.Context) error {
+	// Add nil-check for c.Sender()
+	sender := c.Sender()
+	if sender == nil {
+		return nil
+	}
+
 	text := c.Text()
 	if strings.HasPrefix(text, "/") {
 		b.logger.Info("Unknown command",
 			slog.String("command", text),
-			slog.Int64("user_id", c.Sender().ID),
+			slog.Int64("user_id", sender.ID),
 		)
 		return c.Reply(MessageUnknownCommand)
 	}
@@ -212,7 +221,13 @@ func (b *Bot) onTextMessage(c telebot.Context) error {
 
 // onCallback handles callback requests from inline buttons.
 func (b *Bot) onCallback(c telebot.Context) error {
-	_ = c.Respond()
+	if err := c.Respond(); err != nil {
+		b.logger.Warn("Failed to answer callback",
+			slog.String("callback_id", c.Callback().ID),
+			slog.String("error", err.Error()),
+		)
+
+	}
 	return nil
 }
 
@@ -233,6 +248,7 @@ func (b *Bot) onAudio(c telebot.Context) error {
 		return nil
 	}
 
+	// Change order: validate user first, then check file size
 	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
@@ -244,7 +260,9 @@ func (b *Bot) onAudio(c telebot.Context) error {
 	username := resolveUsername(user)
 	b.logAudioReceived(username, user.ID, audio)
 	b.sendSafe(c, fmt.Sprintf(MessageAudioReceiving, escapeHTML(audio.FileName)), telebot.ModeHTML)
-	b.enqueueAudioJob(c, user, audio, msg.Caption)
+
+	// Pass ctx to enqueue methods
+	b.enqueueAudioJob(ctx, c, user, audio, msg.Caption)
 
 	return nil
 }
@@ -262,6 +280,13 @@ func (b *Bot) onVoice(c telebot.Context) error {
 	voice := msg.Voice
 	user := c.Sender()
 
+	// Add nil-check for user
+	if user == nil {
+		b.logger.Warn("Voice from anonymous user")
+		return nil
+	}
+
+	// Change order: validate user first, then check file size
 	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
@@ -274,7 +299,9 @@ func (b *Bot) onVoice(c telebot.Context) error {
 	b.logVoiceReceived(username, user.ID, voice)
 
 	b.sendSafe(c, MessageVoiceReceiving, telebot.ModeHTML)
-	b.enqueueVoiceJob(c, user, voice)
+
+	// Pass ctx to enqueue methods
+	b.enqueueVoiceJob(ctx, c, user, voice)
 
 	return nil
 }
@@ -306,9 +333,12 @@ func (b *Bot) logVoiceReceived(username string, userID int64, voice *telebot.Voi
 }
 
 // enqueueAudioJob creates and queues an audio processing job.
-func (b *Bot) enqueueAudioJob(c telebot.Context, user *telebot.User, audio *telebot.Audio, caption string) {
+// Fixed: Now accepts context parameter to avoid context leak
+func (b *Bot) enqueueAudioJob(parentCtx context.Context, c telebot.Context, user *telebot.User, audio *telebot.Audio, caption string) {
 	jobFile := copyTelebotFile(audio.File)
-	jobCtx, jobCancel := context.WithTimeout(context.Background(), JobTimeout)
+
+	// Use parent context as base, but with job timeout
+	jobCtx, jobCancel := context.WithTimeout(parentCtx, JobTimeout)
 
 	job := &processJob{
 		ctx:      jobCtx,
@@ -337,10 +367,13 @@ func (b *Bot) enqueueAudioJob(c telebot.Context, user *telebot.User, audio *tele
 }
 
 // enqueueVoiceJob creates and queues a voice message processing job.
-func (b *Bot) enqueueVoiceJob(c telebot.Context, user *telebot.User, voice *telebot.Voice) {
+// Fixed: Now accepts context parameter to avoid context leak
+func (b *Bot) enqueueVoiceJob(parentCtx context.Context, c telebot.Context, user *telebot.User, voice *telebot.Voice) {
 	jobFile := copyTelebotFile(voice.File)
 	fileName := fmt.Sprintf("voice_%d.ogg", time.Now().UnixNano())
-	jobCtx, jobCancel := context.WithTimeout(context.Background(), JobTimeout)
+
+	// Use parent context as base, but with job timeout
+	jobCtx, jobCancel := context.WithTimeout(parentCtx, JobTimeout)
 
 	job := &processJob{
 		ctx:      jobCtx,
