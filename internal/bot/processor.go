@@ -15,18 +15,19 @@ import (
 
 // processJob represents a task for processing audio or voice messages.
 type processJob struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	chatID   int64
-	userID   int64
-	file     telebot.File
-	fileName string
-	mimeType string
-	fileSize int64
-	duration int
-	caption  string
-	fileType string // "audio" or "voice"
-	tempPath string // path to temporary file
+	ctx       context.Context
+	cancel    context.CancelFunc
+	chatID    int64
+	userID    int64
+	file      telebot.File
+	fileName  string
+	mimeType  string
+	fileSize  int64
+	duration  int
+	caption   string
+	fileType  string // "audio" or "voice"
+	tempPath  string // path to temporary file
+	createdAt time.Time
 }
 
 // stepContext holds state between processing steps.

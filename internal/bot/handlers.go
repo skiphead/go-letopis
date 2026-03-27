@@ -37,7 +37,7 @@ func (b *Bot) chat(c telebot.Context) error {
 		return nil
 	}
 
-	b.logger.Info("Start command",
+	b.logger.Info("Chat command",
 		slog.String("username", resolveUsername(user)),
 		slog.Int64("user_id", user.ID),
 	)
@@ -64,7 +64,7 @@ func (b *Bot) listByUserID(c telebot.Context) error {
 		return nil
 	}
 
-	b.logger.Info("Start command",
+	b.logger.Info("List command",
 		slog.String("username", resolveUsername(user)),
 		slog.Int64("user_id", user.ID),
 	)
@@ -79,7 +79,6 @@ func (b *Bot) listByUserID(c telebot.Context) error {
 	}
 
 	msg := FormatMeetingsList(list)
-
 	return c.Send(msg, telebot.ModeHTML)
 }
 
@@ -93,7 +92,7 @@ func (b *Bot) get(c telebot.Context) error {
 		return nil
 	}
 
-	b.logger.Info("Start command",
+	b.logger.Info("Get command",
 		slog.String("username", resolveUsername(user)),
 		slog.Int64("user_id", user.ID),
 	)
@@ -104,7 +103,7 @@ func (b *Bot) get(c telebot.Context) error {
 			slog.Int64("user_id", user.ID),
 			slog.String("payload", c.Message().Payload),
 		)
-		return c.Reply(MessageInternalError, telebot.ModeHTML) // 👈 Дружелюбное сообщение
+		return c.Reply(MessageInvalidMeetingID, telebot.ModeHTML)
 	}
 
 	if !b.userUseCase.Validate(ctx, user.ID) {
@@ -116,7 +115,14 @@ func (b *Bot) get(c telebot.Context) error {
 		return err
 	}
 
+	if meeting == nil {
+		return c.Reply(MessageMeetingNotFound, telebot.ModeHTML)
+	}
+
 	msg := meeting.Transcription
+	if msg == "" {
+		msg = MessageNoTranscription
+	}
 
 	return c.Send(msg, telebot.ModeHTML)
 }
@@ -131,7 +137,7 @@ func (b *Bot) find(c telebot.Context) error {
 		return nil
 	}
 
-	b.logger.Info("Start command",
+	b.logger.Info("Find command",
 		slog.String("username", resolveUsername(user)),
 		slog.Int64("user_id", user.ID),
 	)
@@ -140,8 +146,12 @@ func (b *Bot) find(c telebot.Context) error {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
-	keywords := strings.Fields(c.Message().Payload)
+	payload := c.Message().Payload
+	if payload == "" {
+		return c.Reply(MessageSearchQueryRequired, telebot.ModeHTML)
+	}
 
+	keywords := strings.Fields(payload)
 	req := entity.SearchRequest{
 		UserID:   user.ID,
 		Keywords: keywords,
@@ -153,7 +163,6 @@ func (b *Bot) find(c telebot.Context) error {
 	}
 
 	msg := FormatSearchResult(result)
-
 	return c.Send(msg, telebot.ModeHTML)
 }
 
@@ -179,6 +188,11 @@ func (b *Bot) onStart(c telebot.Context) error {
 		LastName:   user.LastName,
 	})
 	if err != nil {
+		// Check if user already exists
+		if strings.Contains(err.Error(), "already started") {
+			msg := fmt.Sprintf(MessageWelcomeBack, escapeHTML(user.FirstName))
+			return c.Send(msg, telebot.ModeHTML)
+		}
 		return err
 	}
 
@@ -193,6 +207,7 @@ func (b *Bot) onHelp(c telebot.Context) error {
 		b.logger.Warn("Help command from anonymous user")
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
+
 	b.logger.Info("Help command",
 		slog.String("username", resolveUsername(user)),
 		slog.Int64("user_id", user.ID),
@@ -202,7 +217,6 @@ func (b *Bot) onHelp(c telebot.Context) error {
 
 // onTextMessage handles regular text messages.
 func (b *Bot) onTextMessage(c telebot.Context) error {
-	// Add nil-check for c.Sender()
 	sender := c.Sender()
 	if sender == nil {
 		return nil
@@ -226,16 +240,12 @@ func (b *Bot) onCallback(c telebot.Context) error {
 			slog.String("callback_id", c.Callback().ID),
 			slog.String("error", err.Error()),
 		)
-
 	}
 	return nil
 }
 
 // onAudio handles incoming audio files.
 func (b *Bot) onAudio(c telebot.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	msg := c.Message()
 	if msg == nil || msg.Audio == nil {
 		return nil
@@ -248,8 +258,11 @@ func (b *Bot) onAudio(c telebot.Context) error {
 		return nil
 	}
 
-	// Change order: validate user first, then check file size
-	if !b.userUseCase.Validate(ctx, user.ID) {
+	// Validate user with short timeout
+	validateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if !b.userUseCase.Validate(validateCtx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
@@ -261,15 +274,14 @@ func (b *Bot) onAudio(c telebot.Context) error {
 	b.logAudioReceived(username, user.ID, audio)
 	b.sendSafe(c, fmt.Sprintf(MessageAudioReceiving, escapeHTML(audio.FileName)), telebot.ModeHTML)
 
-	// Pass ctx to enqueue methods
-	b.enqueueAudioJob(ctx, c, user, audio, msg.Caption)
-
+	b.enqueueAudioJob(c, user, audio, msg.Caption)
 	return nil
 }
 
 // onVoice handles incoming voice messages.
 func (b *Bot) onVoice(c telebot.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use shorter timeout for validation only
+	validateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	msg := c.Message()
@@ -279,15 +291,12 @@ func (b *Bot) onVoice(c telebot.Context) error {
 
 	voice := msg.Voice
 	user := c.Sender()
-
-	// Add nil-check for user
 	if user == nil {
 		b.logger.Warn("Voice from anonymous user")
 		return nil
 	}
 
-	// Change order: validate user first, then check file size
-	if !b.userUseCase.Validate(ctx, user.ID) {
+	if !b.userUseCase.Validate(validateCtx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
@@ -297,12 +306,9 @@ func (b *Bot) onVoice(c telebot.Context) error {
 
 	username := resolveUsername(user)
 	b.logVoiceReceived(username, user.ID, voice)
-
 	b.sendSafe(c, MessageVoiceReceiving, telebot.ModeHTML)
 
-	// Pass ctx to enqueue methods
-	b.enqueueVoiceJob(ctx, c, user, voice)
-
+	b.enqueueVoiceJob(c, user, voice)
 	return nil
 }
 
@@ -333,25 +339,25 @@ func (b *Bot) logVoiceReceived(username string, userID int64, voice *telebot.Voi
 }
 
 // enqueueAudioJob creates and queues an audio processing job.
-// Fixed: Now accepts context parameter to avoid context leak
-func (b *Bot) enqueueAudioJob(parentCtx context.Context, c telebot.Context, user *telebot.User, audio *telebot.Audio, caption string) {
+func (b *Bot) enqueueAudioJob(c telebot.Context, user *telebot.User, audio *telebot.Audio, caption string) {
 	jobFile := copyTelebotFile(audio.File)
 
-	// Use parent context as base, but with job timeout
-	jobCtx, jobCancel := context.WithTimeout(parentCtx, JobTimeout)
+	// Job uses its own context independent of the request
+	jobCtx, jobCancel := context.WithTimeout(context.Background(), JobTimeout)
 
 	job := &processJob{
-		ctx:      jobCtx,
-		cancel:   jobCancel,
-		chatID:   c.Chat().ID,
-		userID:   user.ID,
-		file:     jobFile,
-		fileName: audio.FileName,
-		mimeType: audio.MIME,
-		fileSize: audio.FileSize,
-		duration: audio.Duration,
-		caption:  caption,
-		fileType: "audio",
+		ctx:       jobCtx,
+		cancel:    jobCancel,
+		chatID:    c.Chat().ID,
+		userID:    user.ID,
+		file:      jobFile,
+		fileName:  audio.FileName,
+		mimeType:  audio.MIME,
+		fileSize:  audio.FileSize,
+		duration:  audio.Duration,
+		caption:   caption,
+		fileType:  "audio",
+		createdAt: time.Now(),
 	}
 
 	if !b.tryEnqueueJob(job) {
@@ -367,25 +373,25 @@ func (b *Bot) enqueueAudioJob(parentCtx context.Context, c telebot.Context, user
 }
 
 // enqueueVoiceJob creates and queues a voice message processing job.
-// Fixed: Now accepts context parameter to avoid context leak
-func (b *Bot) enqueueVoiceJob(parentCtx context.Context, c telebot.Context, user *telebot.User, voice *telebot.Voice) {
+func (b *Bot) enqueueVoiceJob(c telebot.Context, user *telebot.User, voice *telebot.Voice) {
 	jobFile := copyTelebotFile(voice.File)
 	fileName := fmt.Sprintf("voice_%d.ogg", time.Now().UnixNano())
 
-	// Use parent context as base, but with job timeout
-	jobCtx, jobCancel := context.WithTimeout(parentCtx, JobTimeout)
+	// Job uses its own context independent of the request
+	jobCtx, jobCancel := context.WithTimeout(context.Background(), JobTimeout)
 
 	job := &processJob{
-		ctx:      jobCtx,
-		cancel:   jobCancel,
-		chatID:   c.Chat().ID,
-		userID:   user.ID,
-		file:     jobFile,
-		fileName: fileName,
-		mimeType: voice.MIME,
-		fileSize: voice.FileSize,
-		duration: voice.Duration,
-		fileType: "voice",
+		ctx:       jobCtx,
+		cancel:    jobCancel,
+		chatID:    c.Chat().ID,
+		userID:    user.ID,
+		file:      jobFile,
+		fileName:  fileName,
+		mimeType:  voice.MIME,
+		fileSize:  voice.FileSize,
+		duration:  voice.Duration,
+		fileType:  "voice",
+		createdAt: time.Now(),
 	}
 
 	if !b.tryEnqueueJob(job) {
