@@ -1,18 +1,36 @@
+# Конфигурация бота
+bot:
+  worker_count: 5
+  tmp_dir: "./tmp/audio"        # Добавлено - директория для временных файлов
+
+# Конфигурация Telegram
 telegram:
-  address_api: "https://api.telegram.org"
-  secret_key: "123456789:AAH_example_token_here"
-  poll_interval: 3s          # интервал опроса (для Long Polling)
-  parse_mode: "HTML"         # HTML или Markdown
-  allowed_updates:           # какие обновления получать
+  address: "https://api.telegram.org"
+  insecure: false               # Исправлено: true/false без слеша
+  token: "123456789:AAH_example_token_here"  # Замените на реальный токен
+  poll_interval: 3s             # интервал опроса (для Long Polling)
+  parse_mode: "HTML"            # HTML или Markdown
+  allowed_updates:              # какие обновления получать
     - message
     - edited_message
     - callback_query
     - inline_query
 
+# Конфигурация Salute Speech
+salute_speech:
+  client_id: "your_client_id_here"        # Замените на реальный client_id
+  client_secret: "your_client_secret_here" # Замените на реальный client_secret
+
+# Конфигурация GigaChat
+giga_chat:
+  client_id: "your_client_id_here"        # Замените на реальный client_id
+  client_secret: "your_client_secret_here" # Замените на реальный client_secret
+
+# Конфигурация базы данных
 db_config:
   schema: "public"
-  dbname: "talktracer"
-  user: "talktracer_user"
-  password: "super_secret_password"
-  nodes:
-    - "127.0.0.1:5435"
+  dbname: "letopis"                       # Рекомендуется использовать отдельную БД
+  user: "postgres"
+  password: "your_password_here"          # Замените на реальный пароль
+  host: "127.0.0.1"
+  port: 5432

@@ -29,6 +29,9 @@ func (b *Bot) registerHandlers() {
 
 // chat handles the /chat command.
 func (b *Bot) chat(c telebot.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	user := c.Sender()
 	if user == nil {
 		return nil
@@ -39,7 +42,7 @@ func (b *Bot) chat(c telebot.Context) error {
 		slog.Int64("user_id", user.ID),
 	)
 
-	if !b.userUseCase.Validate(context.Background(), user.ID) {
+	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
@@ -53,6 +56,9 @@ func (b *Bot) chat(c telebot.Context) error {
 
 // listByUserID handles the /list command.
 func (b *Bot) listByUserID(c telebot.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	user := c.Sender()
 	if user == nil {
 		return nil
@@ -67,7 +73,7 @@ func (b *Bot) listByUserID(c telebot.Context) error {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
-	list, err := b.meetingUseCase.List(context.Background(), user.ID)
+	list, err := b.meetingUseCase.List(ctx, user.ID)
 	if err != nil {
 		return err
 	}
@@ -79,6 +85,9 @@ func (b *Bot) listByUserID(c telebot.Context) error {
 
 // get handles the /get command.
 func (b *Bot) get(c telebot.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	user := c.Sender()
 	if user == nil {
 		return nil
@@ -94,7 +103,7 @@ func (b *Bot) get(c telebot.Context) error {
 		return err
 	}
 
-	if !b.userUseCase.Validate(context.Background(), user.ID) {
+	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
@@ -110,6 +119,9 @@ func (b *Bot) get(c telebot.Context) error {
 
 // find handles the /find command.
 func (b *Bot) find(c telebot.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	user := c.Sender()
 	if user == nil {
 		return nil
@@ -120,7 +132,7 @@ func (b *Bot) find(c telebot.Context) error {
 		slog.Int64("user_id", user.ID),
 	)
 
-	if !b.userUseCase.Validate(context.Background(), user.ID) {
+	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
@@ -148,6 +160,9 @@ func (b *Bot) find(c telebot.Context) error {
 
 // onStart handles the /start command.
 func (b *Bot) onStart(c telebot.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	user := c.Sender()
 	if user == nil {
 		return nil
@@ -158,7 +173,7 @@ func (b *Bot) onStart(c telebot.Context) error {
 		slog.Int64("user_id", user.ID),
 	)
 
-	u, err := b.userUseCase.Start(context.Background(), &entity.User{
+	u, err := b.userUseCase.Start(ctx, &entity.User{
 		TelegramID: user.ID,
 		UserName:   user.Username,
 		FirstName:  user.FirstName,
@@ -203,6 +218,9 @@ func (b *Bot) onCallback(c telebot.Context) error {
 
 // onAudio handles incoming audio files.
 func (b *Bot) onAudio(c telebot.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	msg := c.Message()
 	if msg == nil || msg.Audio == nil {
 		return nil
@@ -215,7 +233,7 @@ func (b *Bot) onAudio(c telebot.Context) error {
 		return nil
 	}
 
-	if !b.userUseCase.Validate(context.Background(), user.ID) {
+	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
@@ -233,6 +251,9 @@ func (b *Bot) onAudio(c telebot.Context) error {
 
 // onVoice handles incoming voice messages.
 func (b *Bot) onVoice(c telebot.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	msg := c.Message()
 	if msg == nil || msg.Voice == nil {
 		return nil
@@ -241,7 +262,7 @@ func (b *Bot) onVoice(c telebot.Context) error {
 	voice := msg.Voice
 	user := c.Sender()
 
-	if !b.userUseCase.Validate(context.Background(), user.ID) {
+	if !b.userUseCase.Validate(ctx, user.ID) {
 		return c.Send(MessageHelp, telebot.ModeHTML)
 	}
 
