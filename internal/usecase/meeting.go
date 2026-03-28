@@ -96,23 +96,21 @@ func (uc *meetingUseCase) SearchByKeywords(ctx context.Context, req entity.Searc
 		return nil, err
 	}
 
-	results, err := uc.meetingRepo.SearchByKeywords(ctx, req)
-	if err != nil {
-		uc.logger.Error("Failed to search meetings by keywords",
-			slog.Int64("user_id", req.UserID),
-			slog.Any("keywords", req.Keywords),
-			slog.String("error", err.Error()),
-		)
-		return nil, fmt.Errorf("failed to search meetings: %w", err)
+	var records []entity.TranscriptionRecord
+	for record, err := range uc.meetingRepo.SearchByKeywordsIter(ctx, req) {
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
 	}
 
 	uc.logger.Debug("Search completed successfully",
 		slog.Int64("user_id", req.UserID),
 		slog.Any("keywords", req.Keywords),
-		slog.Int("results_count", len(results)),
+		slog.Int("results_count", len(records)),
 	)
 
-	return results, nil
+	return records, nil
 }
 
 // validateUserID validates the user ID parameter.
