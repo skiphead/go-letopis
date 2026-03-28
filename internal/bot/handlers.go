@@ -181,6 +181,11 @@ func (b *Bot) onStart(c telebot.Context) error {
 		slog.Int64("user_id", user.ID),
 	)
 
+	if b.userUseCase.Validate(ctx, user.ID) {
+		msg := fmt.Sprintf(MessageWelcomeBack, escapeHTML(user.FirstName))
+		return c.Send(msg, telebot.ModeHTML)
+	}
+
 	u, err := b.userUseCase.Start(ctx, &entity.User{
 		TelegramID: user.ID,
 		UserName:   user.Username,
@@ -188,11 +193,6 @@ func (b *Bot) onStart(c telebot.Context) error {
 		LastName:   user.LastName,
 	})
 	if err != nil {
-		// Check if user already exists
-		if strings.Contains(err.Error(), "already started") {
-			msg := fmt.Sprintf(MessageWelcomeBack, escapeHTML(user.FirstName))
-			return c.Send(msg, telebot.ModeHTML)
-		}
 		return err
 	}
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime/debug"
 	"time"
+	"unique"
 
 	"github.com/skiphead/go-letopis/internal/domain/entity"
 	"gopkg.in/telebot.v3"
@@ -35,6 +36,12 @@ type stepContext struct {
 	tempPath string
 	media    *entity.Media
 }
+
+// File type handles for efficient comparison.
+var (
+	handleAudio = unique.Make("audio")
+	handleVoice = unique.Make("voice")
+)
 
 // Step processing errors.
 var (
@@ -201,11 +208,18 @@ func (b *Bot) stepConvertAndSave(job *processJob, logger *slog.Logger) error {
 // stepNotifySuccess sends success notification to the user.
 func (b *Bot) stepNotifySuccess(job *processJob, logger *slog.Logger) error {
 	var msg string
-	if job.fileType == "audio" {
+	fileTypeHandle := unique.Make(job.fileType)
+
+	switch fileTypeHandle {
+	case handleAudio:
 		msg = fmt.Sprintf(MessageAudioSaved,
 			escapeHTML(job.fileName), job.duration, formatFileSize(job.fileSize))
-	} else {
+	case handleVoice:
 		msg = fmt.Sprintf(MessageVoiceSaved, job.duration)
+	default:
+		logger.Warn("Unknown file type in success notification",
+			slog.String("file_type", job.fileType))
+		msg = MessageInternalError
 	}
 
 	b.sendSafeToChat(job.chatID, msg, telebot.ModeHTML)
@@ -291,9 +305,12 @@ func (b *Bot) createMediaFromJob(job *processJob) *entity.Media {
 		FileName: job.fileName,
 	}
 
-	if job.fileType == "voice" {
+	fileTypeHandle := unique.Make(job.fileType)
+
+	switch fileTypeHandle {
+	case handleVoice:
 		media.FileID = job.file.FileID
-	} else {
+	case handleAudio:
 		media.Caption = job.caption
 	}
 
